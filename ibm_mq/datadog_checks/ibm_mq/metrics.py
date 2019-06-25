@@ -4,6 +4,10 @@
 
 from __future__ import division
 
+import datetime
+
+from datadog_checks.base import ensure_unicode
+
 try:
     import pymqi
 except ImportError:
@@ -12,6 +16,7 @@ except ImportError:
 
 def queue_metrics():
     return {
+        'msg_enq_count': pymqi.CMQC.MQIA_MSG_ENQ_COUNT,
         'service_interval': pymqi.CMQC.MQIA_Q_SERVICE_INTERVAL,
         'inhibit_put': pymqi.CMQC.MQIA_INHIBIT_PUT,
         'depth_low_limit': pymqi.CMQC.MQIA_Q_DEPTH_LOW_LIMIT,
@@ -62,6 +67,22 @@ def channel_metrics():
     }
 
 
+def channel_status_metrics():
+    return {
+        'batches': pymqi.CMQCFC.MQIACH_BATCHES,
+        'indoubt_status': pymqi.CMQCFC.MQIACH_INDOUBT_STATUS,
+        'buffers_received': pymqi.CMQCFC.MQIACH_BUFFERS_RECEIVED,
+        'buffers_sent': pymqi.CMQCFC.MQIACH_BUFFERS_SENT,
+        'bytes_rcvd': pymqi.CMQCFC.MQIACH_BYTES_RCVD,
+        'bytes_sent': pymqi.CMQCFC.MQIACH_BYTES_SENT,
+        'current_msgs': pymqi.CMQCFC.MQIACH_CURRENT_MSGS,
+        'mca_status': pymqi.CMQCFC.MQIACH_MCA_STATUS,
+        'msgs': pymqi.CMQCFC.MQIACH_MSGS,
+        'resets': pymqi.CMQCFC.MQIACH_SSL_KEY_RESETS,
+        'ssl_key_resets': pymqi.CMQCFC.MQIACH_SSL_KEY_RESETS,
+    }
+
+
 def depth_percent(queue):
     depth_current = queue.inquire(queue_metrics()['depth_current'])
     depth_max = queue.inquire(queue_metrics()['depth_max'])
@@ -72,5 +93,35 @@ def depth_percent(queue):
     return depth_percent
 
 
+def alteration_datetime(channel_info):
+    date_time = "{}_{}".format(
+        ensure_unicode(channel_info[pymqi.CMQC.MQCA_ALTERATION_DATE]).strip(),
+        ensure_unicode(channel_info[pymqi.CMQC.MQCA_ALTERATION_TIME]).strip(),
+    )
+    return datetime.datetime.strptime(date_time, "%Y-%m-%d_%H.%M.%S").timestamp()
+
+
+def last_message_datetime(channel_info):
+    date_time = "{}_{}".format(
+        ensure_unicode(channel_info[pymqi.CMQCFC.MQCACH_LAST_MSG_DATE]).strip(),
+        ensure_unicode(channel_info[pymqi.CMQCFC.MQCACH_LAST_MSG_TIME]).strip(),
+    )
+    return datetime.datetime.strptime(date_time, "%Y-%m-%d_%H.%M.%S").timestamp()
+
+# def ssl_reset_datetime(channel_info):
+#     date_time = "{}_{}".format(
+#         ensure_unicode(channel_info[pymqi.CMQCFC.MQIACH_SSL_RESET_DATE]).strip(), # not exist in pymqi ?
+#         ensure_unicode(channel_info[pymqi.CMQCFC.MQIACH_SSL_RESET_TIME]).strip(), # not exist in pymqi ?
+#     )
+#     return datetime.datetime.strptime(date_time, "%Y-%m-%d_%H.%M.%S").timestamp()
+
 def queue_metrics_functions():
     return {'depth_percent': depth_percent}
+
+
+def channel_metrics_functions():
+    return {'alteration_datetime': alteration_datetime}
+
+
+def channel_status_metrics_functions():
+    return {'last_msg_datetime': last_message_datetime}

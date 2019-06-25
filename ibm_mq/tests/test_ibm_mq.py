@@ -47,12 +47,21 @@ QUEUE_METRICS = [
     'ibm_mq.queue.depth_percent',
 ]
 
+CHANNEL_METRICS = [
+    'ibm_mq.channel.batch_size',
+    # 'ibm_mq.channel.batch_interval',
+    # 'ibm_mq.channel.long_retry_count',
+    # 'ibm_mq.channel.long_retry_interval',
+    # 'ibm_mq.channel.max_message_length',
+    # 'ibm_mq.channel.short_retry_count',
+]
+
 METRICS = [
     'ibm_mq.queue_manager.dist_lists',
     'ibm_mq.queue_manager.max_msg_list',
     'ibm_mq.channel.channels',
     'ibm_mq.channel.count',
-] + QUEUE_METRICS
+] + QUEUE_METRICS + CHANNEL_METRICS
 
 OPTIONAL_METRICS = [
     'ibm_mq.queue.max_channels',

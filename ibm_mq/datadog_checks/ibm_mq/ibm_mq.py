@@ -1,7 +1,7 @@
 # (C) Datadog, Inc. 2018
 # All rights reserved
 # Licensed under a 3-clause BSD style license (see LICENSE)
-
+import datetime
 import logging
 
 from six import iteritems
@@ -102,6 +102,7 @@ class IbmMqCheck(AgentCheck):
                     # so we don't collect those metrics from those queues
                     if queue_name not in config.DISALLOWED_QUEUES:
                         self.get_pcf_queue_metrics(queue_manager, queue_name, queue_tags)
+                        self.get_pcf_queue_reset_stats(queue_manager, queue_name, queue_tags)
                     self.service_check(self.QUEUE_SERVICE_CHECK, AgentCheck.OK, queue_tags)
                     queue.close()
                 except Exception as e:
@@ -209,8 +210,23 @@ class IbmMqCheck(AgentCheck):
                         msg = msg.format(mname, queue_name)
                         log.debug(msg)
 
+    def get_pcf_queue_reset_stats(self, queue_manager, queue_name, tags):
+        try:
+            args = {
+                pymqi.CMQC.MQCA_Q_NAME: ensure_bytes(queue_name),
+            }
+            pcf = pymqi.PCFExecute(queue_manager)
+            response = pcf.MQCMD_RESET_Q_STATS(args)
+        except pymqi.MQMIError as e:
+            self.warning("Error getting queue stats for {}: {}".format(queue_name, e))
+        else:
+            pass
+
     def get_pcf_channel_metrics(self, queue_manager, tags, config):
-        args = {pymqi.CMQCFC.MQCACH_CHANNEL_NAME: ensure_bytes('*')}
+        args = {
+            pymqi.CMQCFC.MQCACH_CHANNEL_NAME: ensure_bytes('*'),
+            pymqi.CMQCFC.MQIACF_CHANNEL_ATTRS: pymqi.CMQCFC.MQIACF_ALL,
+        }
 
         try:
             pcf = pymqi.PCFExecute(queue_manager)
@@ -222,6 +238,9 @@ class IbmMqCheck(AgentCheck):
             mname = '{}.channel.channels'.format(self.METRIC_PREFIX)
             self.gauge(mname, channels, tags=tags)
 
+            for channel_info in response:
+                self._get_pcf_channel_metrics(channel_info, tags)
+
         # grab all the discoverable channels
         self._submit_channel_status(queue_manager, '*', tags, config)
 
@@ -230,6 +249,22 @@ class IbmMqCheck(AgentCheck):
         # in this case it'll fail
         for channel in config.channels:
             self._submit_channel_status(queue_manager, channel, tags, config)
+
+    def _get_pcf_channel_metrics(self, channel_info, tags):
+        channel_name = ensure_unicode(channel_info[pymqi.CMQCFC.MQCACH_CHANNEL_NAME]).strip()
+        channel_tags = tags + ["channel:{}".format(channel_name)]
+
+        for metric_suffix, pymqi_value in iteritems(metrics.channel_metrics()):
+            if pymqi_value in channel_info:
+                metric_value = channel_info[pymqi_value]
+                metric_name = '{}.channel.{}'.format(self.METRIC_PREFIX, metric_suffix)
+                self.gauge(metric_name, metric_value, tags=channel_tags)
+
+        for metric_suffix, func in iteritems(metrics.channel_metrics_functions()):
+            metric_value = func(channel_info)
+            if metric_value is not None:
+                metric_name = '{}.channel.{}'.format(self.METRIC_PREFIX, metric_suffix)
+                self.gauge(metric_name, metric_value, tags=channel_tags)
 
     def _submit_channel_status(self, queue_manager, search_channel_name, tags, config):
         """Submit channel status
@@ -270,3 +305,19 @@ class IbmMqCheck(AgentCheck):
         for status, status_label in iteritems(self.CHANNEL_STATUS_MAP):
             status_active = int(status == channel_status)
             self.gauge(self.CHANNEL_COUNT_CHECK, status_active, tags=channel_tags + ["status:" + status_label])
+
+    def _get_pcf_channel_status_metrics(self, channel_info, tags):
+        channel_name = ensure_unicode(channel_info[pymqi.CMQCFC.MQCACH_CHANNEL_NAME]).strip()
+        channel_tags = tags + ["channel:{}".format(channel_name)]
+
+        for metric_suffix, pymqi_value in iteritems(metrics.channel_status_metrics()):
+            if pymqi_value in channel_info:
+                metric_value = channel_info[pymqi_value]
+                metric_name = '{}.channel.{}'.format(self.METRIC_PREFIX, metric_suffix)
+                self.gauge(metric_name, metric_value, tags=channel_tags)
+
+        for metric_suffix, func in iteritems(metrics.channel_status_metrics_functions()):
+            metric_value = func(channel_info)
+            if metric_value is not None:
+                metric_name = '{}.channel.{}'.format(self.METRIC_PREFIX, metric_suffix)
+                self.gauge(metric_name, metric_value, tags=channel_tags)
