@@ -1,7 +1,5 @@
 # CHANGELOG - Kube_controller_manager
 
-## 1.3.0
-
 * [Added] Add support for new metrics introduced in kubernetes v1.14
 * [Added] Add new parameter "ignore_deprecated" for ignoring deprecated metrics
 
